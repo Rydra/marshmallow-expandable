@@ -53,83 +53,59 @@ class ExpandableNested(fields.Nested):
 
         return schema
 
-    def _get_interactor_and_params(self):
-        if not hasattr(self.schema.Meta, 'retrieve'):
-            raise Exception('The nested class does not have an "query_function" Meta '
-                            'attribute, therefore it does not support expansion')
+    def _split_argument_map(self, argument):
+        return argument if isinstance(argument, tuple) else (argument, argument)
+
+    def _get_query_function_and_arguments(self, function_name):
+        if not hasattr(self.schema.Meta, function_name):
+            return None, None
 
         try:
-            retrieve_func, retrieve_arguments = self.schema.Meta.retrieve
+            function, arguments = getattr(self.schema.Meta, function_name)
         except Exception as e:
             raise Exception('The interactor Meta attribute should be a tuple composed '
                             'by the function to build the interactor and the list of parameters') from e
 
-        try:
-            batch_func, batch_arguments = self.schema.Meta.batch
-        except Exception:
-            batch_func, batch_arguments = None, None
-
-        retrieve_argument_map = {}
+        argument_map = dict(self._split_argument_map(arg) for arg in arguments)
         """Maps a queryparam from the schema to the interactor"""
 
-        for arg in retrieve_arguments:
-            if isinstance(arg, tuple):
-                arg_in_interactor, arg_in_schema = arg
-                retrieve_argument_map[arg_in_interactor] = arg_in_schema
-            else:
-                retrieve_argument_map[arg] = arg
+        return function, argument_map
 
-        batch_argument_map = {}
-        if batch_func:
-            for arg in batch_arguments:
-                arg_in_interactor, arg_in_schema = arg
-                batch_argument_map[arg_in_interactor] = arg_in_schema
+    def _get_query_functions(self):
+        retrieve_func, retrieve_argument_map = self._get_query_function_and_arguments('retrieve')
+        batch_func, batch_arguments_map = self._get_query_function_and_arguments('batch')
 
-        return retrieve_func, retrieve_argument_map, batch_func, batch_argument_map
+        return retrieve_func, retrieve_argument_map, batch_func, batch_arguments_map
 
     def _serialize(self, nested_obj, attr, obj):
-        resource = nested_obj
-
-        if self._should_expand(attr):
-            retrieve_func, argument_map, batch_func, batch_argument_map = self._get_interactor_and_params()
-
-            if self.many and batch_func:
-                arguments = self._generate_batch_arguments(nested_obj, batch_argument_map)
-                result = self._execute_query(batch_func, arguments)
-            else:
-                arguments = self._generate_arguments(nested_obj, argument_map)
-
-                if self.many:
-                    result = [self._execute_query(retrieve_func, qparam) for qparam in arguments]
-                else:
-                    result = self._execute_query(retrieve_func, arguments)
-
-            resource = result
-
+        should_expand = hasattr(self.root, 'expand') and attr in self.root.expand
+        resource = self._expand_resource(nested_obj) if should_expand else nested_obj
         return super()._serialize(resource, attr, obj)
 
-    def _execute_query(self, retrieve_func, qparams):
-        resource_or_interactor = retrieve_func(**qparams)
+    def _expand_resource(self, nested_obj):
+        retrieve_func, argument_map, batch_func, batch_argument_map = self._get_query_functions()
+        can_use_batch_function = self.many and batch_func is not None
 
-        if self._is_interactor(resource_or_interactor):
-            result = resource_or_interactor.execute()
+        if can_use_batch_function:
+            arguments = self._generate_batch_arguments(nested_obj, batch_argument_map)
+            result = self._execute_query(batch_func, arguments)
+        elif self.many:
+            arguments = [{argument: o[attribute_in_schema] for argument, attribute_in_schema in argument_map.items()} for o in nested_obj]
+            result = [self._execute_query(retrieve_func, qparam) for qparam in arguments]
         else:
-            result = resource_or_interactor
+            arguments = {argument: nested_obj[attribute_in_schema] for argument, attribute_in_schema in argument_map.items()}
+            result = self._execute_query(retrieve_func, arguments)
 
         return result
 
-    def _is_interactor(self, resource_or_interactor):
-        return hasattr(resource_or_interactor, 'execute')
+    def _execute_query(self, retrieve_func, arguments):
+        resource_or_interactor = retrieve_func(**arguments)
+        is_interactor = hasattr(resource_or_interactor, 'execute')
+        return resource_or_interactor.execute if is_interactor else resource_or_interactor
 
     def _generate_batch_arguments(self, obj, argument_map):
         assert self._is_iterable(obj), 'The object is not a list as expected!'
         return {argument: [o[attribute_in_schema] for o in obj] for argument, attribute_in_schema in argument_map.items()}
-
-    def _generate_arguments(self, obj, argument_map):
-        if self.many:
-            return [{argument: o[attribute_in_schema] for argument, attribute_in_schema in argument_map.items()} for o in obj]
-        else:
-            return {argument: obj[attribute_in_schema] for argument, attribute_in_schema in argument_map.items()}
 
     def _is_iterable(self, obj):
         try:
@@ -138,6 +114,4 @@ class ExpandableNested(fields.Nested):
         except TypeError:
             return False
 
-    def _should_expand(self, attr):
-        # The only one that knows if we should expand this attribute or not is the root schema
-        return hasattr(self.root, 'expand') and attr in self.root.expand
+

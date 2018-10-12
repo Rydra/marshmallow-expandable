@@ -1,0 +1,7 @@
+# For the time being, exclude companydemo, but we shouldn't
+
+[flake8]
+ignore = E501, F405
+exclude =
+    .git,
+    __pycache__,

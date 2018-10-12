@@ -12,11 +12,11 @@ setup(name='marshmallow-expandable',
       keywords='rest expansion resource expand marshmallow api',
       packages=find_packages(),
       classifiers=[
-            'Development Status :: 3',
-            'Programming Language :: Python'
+          'Development Status :: 3',
+          'Programming Language :: Python'
       ],
       install_requires=[
-        "marshmallow"
+          "marshmallow"
       ],
       setup_requires=['pytest-runner'],
       tests_require=['pytest'],

@@ -57,6 +57,7 @@ sample_json = dict(
     ]
 )
 
+
 class TestExpandableSchemaMixin:
     def test_serialize(self):
         result, errors = MySchema(expand=['attr3']).dump(sample_json)
@@ -68,7 +69,8 @@ class TestExpandableSchemaMixin:
             attr3=dict(
                 id=4,
                 attr3='pine-4',
-                attr4='pineapple-4'
+                attr4='pineapple-4',
+                attr7={'id': 7}
             ),
             attr4=[
                 dict(id=1), dict(id=2), dict(id=3)

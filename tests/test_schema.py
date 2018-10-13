@@ -1,7 +1,7 @@
 from marshmallow import Schema, fields
 
 from marshmallow_expandable import ExpandableSchemaMixin
-from marshmallow_expandable.schema import ExpandableNested
+from marshmallow_expandable.schema import ExpandableNested, ArgumentBuilder
 
 
 def get_my_nested_schema(id):
@@ -23,7 +23,7 @@ class AnotherNestedSchema(ExpandableSchemaMixin, Schema):
     attr6 = ExpandableNested('MyNestedSchema', many=True)
 
     class Meta:
-        retrieve = get_another_nested_schema, [('my_id', 'id')]
+        retrieve = get_another_nested_schema, [('id', 'my_id')]
 
 
 class MySchema(ExpandableSchemaMixin, Schema):
@@ -42,7 +42,7 @@ class MyNestedSchema(ExpandableSchemaMixin, Schema):
 
     class Meta:
         retrieve = get_my_nested_schema, ['id']
-        batch = get_my_nested_schema_batch, [('ids', 'id')]
+        batch = get_my_nested_schema_batch, [('id', 'ids')]
 
 
 sample_json = dict(
@@ -157,3 +157,66 @@ class TestExpandableSchemaMixin:
 
     def test_if_batch_function_is_present_then_use_the_batch_version(self):
         pass
+
+
+class TestArgumentBuilder:
+    def test_build_arguments_given_a_map(self):
+        resource = {
+            'id': 10,
+            'fruit': 'banana',
+            'something': 'else'
+        }
+
+        argument_map = {'id': 'resource_id', 'fruit': 'apple'}
+
+        arguments = ArgumentBuilder().build_arguments(resource, argument_map)
+        assert 10 == arguments['resource_id']
+        assert 'banana' == arguments['apple']
+
+    def test_aggregate_the_results(self):
+        resource_1 = {
+            'id': 10,
+            'fruit': 'banana',
+            'something': 'else'
+        }
+        resource_2 = {
+            'id': 11,
+            'fruit': 'melon',
+            'something': 'else'
+        }
+        resource_3 = {
+            'id': 12,
+            'fruit': 'orange',
+            'something': 'else'
+        }
+
+        argument_map = {'id': 'resource_id', 'fruit': 'apple'}
+
+        arguments = ArgumentBuilder().build_arguments([resource_1, resource_2, resource_3], argument_map, many=True, aggregate=True)
+        assert [10, 11, 12] == arguments['resource_id']
+        assert ['banana', 'melon', 'orange'] == arguments['apple']
+
+    def test_return_set_when_not_aggregating_the_results(self):
+        resource_1 = {
+            'id': 10,
+            'fruit': 'banana',
+            'something': 'else'
+        }
+        resource_2 = {
+            'id': 11,
+            'fruit': 'melon',
+            'something': 'else'
+        }
+        resource_3 = {
+            'id': 12,
+            'fruit': 'orange',
+            'something': 'else'
+        }
+
+        argument_map = {'id': 'resource_id', 'fruit': 'apple'}
+
+        argument_set = ArgumentBuilder().build_arguments([resource_1, resource_2, resource_3], argument_map, many=True)
+        expected_argument_set = [dict(resource_id=10, apple='banana'), dict(resource_id=11, apple='melon'), dict(resource_id=12, apple='orange')]
+
+        for expected_argument in expected_argument_set:
+            assert expected_argument in argument_set

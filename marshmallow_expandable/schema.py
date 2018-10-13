@@ -2,6 +2,7 @@ import logging
 
 from marshmallow import fields
 
+from marshmallow_expandable.argument_builder import ArgumentBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -59,43 +60,15 @@ class ExpandableNested(fields.Nested):
         return super()._serialize(resource, attr, obj)
 
     def _expand_resource(self, resource):
-        return QueryBuilder().build_query(self.schema, self.many, resource)
+        return ResourceExpander().expand_resource(self.schema, self.many, resource)
 
 
-class ArgumentBuilder:
-    def build_arguments(self, resource, argument_map, aggregate=False, many=False):
-        """
-        Constructs the arguments to be passed to another function as kwargs from values in the resource.
-        The aggregate is only applicable when many=True. Tells whether all the values from the
-        resource should be aggregated into single variables
-        """
-        if not many:
-            return {argument: resource[attribute_in_schema] for attribute_in_schema, argument in argument_map.items()}
-
-        assert self._is_iterable(resource), 'The object is not iterable as expected!'
-
-        if aggregate:
-            return {argument: [o[attribute_in_schema] for o in resource] for attribute_in_schema, argument in argument_map.items()}
-
-        return (
-            [{argument: o[attribute_in_schema] for attribute_in_schema, argument in argument_map.items()}
-             for o in resource]
-        )
-
-    def _is_iterable(self, obj):
-        try:
-            iter(obj)
-            return True
-        except TypeError:
-            return False
-
-
-class QueryBuilder:
+class ResourceExpander:
     """
     The resource is only used for generating the arguments that will serve as input for the
     function we are going to call
     """
-    def build_query(self, schema, many, resource):
+    def expand_resource(self, schema, many, resource):
         arg_builder = ArgumentBuilder()
 
         if many:
@@ -135,4 +108,4 @@ class QueryBuilder:
     def _execute_query(self, retrieve_func, arguments):
         resource_or_interactor = retrieve_func(**arguments)
         is_interactor = hasattr(resource_or_interactor, 'execute')
-        return resource_or_interactor.execute if is_interactor else resource_or_interactor
+        return resource_or_interactor.execute() if is_interactor else resource_or_interactor

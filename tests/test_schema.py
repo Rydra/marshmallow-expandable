@@ -1,7 +1,8 @@
 from marshmallow import Schema, fields
 
 from marshmallow_expandable import ExpandableSchemaMixin
-from marshmallow_expandable.schema import ExpandableNested, ArgumentBuilder
+from marshmallow_expandable.schema import ExpandableNested
+from marshmallow_expandable.argument_builder import ArgumentBuilder
 
 
 def get_my_nested_schema(id):
